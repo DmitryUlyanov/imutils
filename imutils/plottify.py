@@ -1,3 +1,4 @@
+from functools import partial
 from pdb import set_trace as st
 
 import cv2
@@ -17,15 +18,15 @@ from matplotlib.collections import PatchCollection
 from PIL import Image, ImageDraw
 
 
-__all__ = ["show_img", "draw_outline", "draw_rect", "draw_text", "plot_grid",
-           "rle_from_masked", "mask_from_rle", "geojson_to_plt",
-           "open_img", "resize_keep_ratio", "crop_img", "bbox_rel_to_abs",
-           "plot_polygons", "plot_bboxes", "mask_from_polygon"]
+# __all__ = ["show_img", "draw_outline", "draw_rect", "draw_text", "plot_grid",
+#            "rle_from_masked", "mask_from_rle", "geojson_to_plt",
+#            "open_img", "resize_keep_ratio", "crop_img", "bbox_rel_to_abs",
+#            "plot_polygons", "plot_bboxes", "mask_from_polygon"]
 
 ##############################
 ####### DRAW FUNCTIONS #######
 ##############################
-def show_img(im, ax=None, figsize=None, show_axs=False):
+def show_img(im, ax=None, figsize=None, show_axs=False, show=True):
     ''' Plots an image on ax object. If no ax object was passed, it creates an ax object
     :param im: (np.array) RGB image in np.array format or path to image
     :param ax: (matplotlib.axes._subplots.AxesSubplot)
@@ -38,10 +39,14 @@ def show_img(im, ax=None, figsize=None, show_axs=False):
         
     if not ax:
         fig, ax = plt.subplots(figsize=figsize)
+
     ax.imshow(im)
 
     ax.get_xaxis().set_visible(show_axs)
     ax.get_yaxis().set_visible(show_axs)
+
+    if show:
+        plt.show()
     return ax
 
 def draw_outline(o, lw, c='black'):
@@ -104,7 +109,7 @@ def plot_row(ax, objects, plot_func):
         plot_func(o, ax[i % len(objects)])
 
 
-def plot_grid(objects, plot_func, ncols=4, fig_width=18):
+def plot_grid(objects, plot_func=partial(show_img, show=False), ncols=4, fig_width=18):
     '''
     Creates a grid of ncols width and len(objects)//ncols height and plots objects with plot_func
     :param objects (list): list of objects to plot
@@ -124,6 +129,7 @@ def plot_grid(objects, plot_func, ncols=4, fig_width=18):
     for i in range(nrows):
         slc = objects[i * ncols: i * ncols + ncols]
         plot_row(ax[i], slc, plot_func)
+
     plt.tight_layout()
     plt.show()
 
@@ -165,17 +171,54 @@ def mask_from_rle(rle, imshape):
 ####### HELP FUNCTIONS #######
 ##############################
 
-def open_img(impath, ignore_orientation=False):
-    if ignore_orientation:
-        binary_flag =  cv2.IMREAD_IGNORE_ORIENTATION | cv2.IMREAD_COLOR
-    else:
-        binary_flag = cv2.IMREAD_COLOR
-    img = cv2.imread(impath, binary_flag)
-    if img is not None:
-        img = img[:,:,::-1]
-    else:
-        raise Exception(f"There is no such image '{impath}'")
+def get_image_cv2(path, force_3channels=False):
+    img = cv2.imread(path, -1)
+    if img is None:
+        print(red(path))
+    if len(img.shape) == 3:
+        img = img[:, :, :3]
+        img = img[:, :, ::-1]
+    elif force_3channels:
+        img = np.concatenate([img[:, :, None], img[:, :, None], img[:, :, None]], axis=2)
+        
     return img
+
+
+def get_image_pil(path):
+    img = Image.open(path).convert('RGB')
+    return img
+
+
+def open_img(impath, ignore_orientation=False, backend='cv2'):
+
+    if backend == 'cv2':
+        if ignore_orientation:
+            binary_flag =  cv2.IMREAD_IGNORE_ORIENTATION | cv2.IMREAD_COLOR
+        else:
+            binary_flag = cv2.IMREAD_COLOR
+        
+        img = cv2.imread(impath, binary_flag)
+
+        if img is not None:
+            img = img[:,:,::-1]
+        else:
+            raise Exception(f"There is no such image '{impath}'")
+    
+        return img
+    else: 
+        return Image.open(path).convert('RGB')
+
+def save_img(img, dst):
+    
+    if path.endswith('.png'):
+
+        cv2.imwrite(dst, img,  [cv2.IMWRITE_PNG_COMPRESSION, 9])
+
+    elif path.endswith('.jpg'):
+
+        cv2.imwrite(dst, img, [int(cv2.IMWRITE_JPEG_QUALITY), args.out_jpg_q, cv2.IMWRITE_JPEG_OPTIMIZE, 1])       
+
+
 
 
 def resize_keep_ratio(img, max_size):
@@ -293,3 +336,15 @@ def mask_from_polygon(polygon, imshape):
     img = Image.new('L', (imshape[1], imshape[0]), 0)
     ImageDraw.Draw(img).polygon(polygon, outline=1, fill=1)
     return np.array(img)
+
+
+# Alias
+
+imsave = save_img
+
+imread = open_img
+get_img = open_img
+
+
+imshow = show_img
+show_grid = plot_grid
